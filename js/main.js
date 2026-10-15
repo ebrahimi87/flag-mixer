@@ -23,6 +23,7 @@ let shownCash = state.cash;
 let resetting = false;
 let lastTick = Date.now();
 let saveTimer = 0;
+let actionSaveTimer = 0;
 let lastInput = Date.now();
 let draggingFrom = null;
 let lastCoinSound = 0;
@@ -31,7 +32,14 @@ const pulseTimers = new Array(state.slots.length).fill(0).map((_, i) => 1.5 + i 
 // The save time is `lastTick`: the moment up to which income has been paid.
 // While the page is hidden that stays at the moment it was hidden, so a reload pays the gap once.
 function save() {
+  clearTimeout(actionSaveTimer);
+  actionSaveTimer = 0;
   if (!resetting) rules.saveState(state, storage, lastTick);
+}
+
+// Group rapid actions into one storage write. Hiding or leaving still saves immediately.
+function requestSave() {
+  if (!actionSaveTimer) actionSaveTimer = setTimeout(save, 250);
 }
 
 function refreshPanels() {
@@ -200,7 +208,7 @@ function afterAction() {
   refreshPanels();
   ui.renderAtlas(state);
   updateTip();
-  save();
+  requestSave();
 }
 
 // ── Rebirth ──────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@
 let ctx = null;
 let master = null;
 let muted = false;
+let noiseBuffer = null;
 
 const VOLUME = 0.55;
 
@@ -47,14 +48,16 @@ function tone({ freq, to = freq, type = 'sine', start = 0, dur = 0.15, vol = 0.3
 function whoosh({ start = 0, dur = 0.3, vol = 0.15, from = 600, to = 5000 }) {
   if (!ctx || muted) return;
   const t0  = ctx.currentTime + start;
-  const len = Math.ceil(ctx.sampleRate * dur);
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  if (!noiseBuffer) {
+    // The longest whoosh is 1.1 seconds. Reuse its noise instead of rebuilding it per merge.
+    noiseBuffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 1.2), ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  }
   const src    = ctx.createBufferSource();
   const filter = ctx.createBiquadFilter();
   const gain   = ctx.createGain();
-  src.buffer = buf;
+  src.buffer = noiseBuffer;
   filter.type = 'bandpass';
   filter.Q.value = 1.2;
   filter.frequency.setValueAtTime(from, t0);
@@ -65,7 +68,7 @@ function whoosh({ start = 0, dur = 0.3, vol = 0.15, from = 600, to = 5000 }) {
   src.connect(filter);
   filter.connect(gain);
   gain.connect(master);
-  src.start(t0);
+  src.start(t0, 0, dur);
 }
 
 // Notes on a major pentatonic scale starting at C5; any step sounds good after any other.

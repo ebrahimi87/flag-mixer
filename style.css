@@ -459,25 +459,17 @@ svg { display: block; }
   box-shadow: 0 2px 6px rgba(0,0,0,.35);
 }
 
-/* One-shot medal animations (added by ui.animateSlot) */
-.medal.pop     { animation: pop .55s cubic-bezier(.2, 1.6, .4, 1); }
-.medal.drop-in { animation: dropIn .5s cubic-bezier(.2, 1.4, .4, 1); }
-.medal.land    { animation: land .3s ease-out; }
-.medal.wiggle  { animation: wiggle .45s ease-in-out; }
-.medal.pop::before {
-  content: '';
+/* Merge flash; flash and medal movement use native animations in ui.animateSlot. */
+.merge-flash {
   position: absolute;
   inset: 0;
   z-index: 2;
   border-radius: 50%;
   background: #fff;
-  animation: flashFade .4s ease-out forwards;
+  opacity: 0;
+  pointer-events: none;
 }
-@keyframes pop     { 0% { transform: scale(.4); } 55% { transform: scale(1.22); } 100% { transform: scale(1); } }
-@keyframes dropIn  { 0% { transform: translateY(-45%) scale(.3); opacity: 0; } 60% { transform: translateY(4%) scale(1.08); opacity: 1; } 100% { transform: none; } }
-@keyframes land    { 40% { transform: scale(.9, 1.08); } 70% { transform: scale(1.05, .95); } }
 @keyframes wiggle  { 25% { transform: rotate(-10deg) scale(1.06); } 75% { transform: rotate(8deg) scale(1.06); } }
-@keyframes flashFade { from { opacity: .95; } to { opacity: 0; } }
 
 /* Dragging */
 .slot.dragging .medal, .slot.dragging .slot-name { opacity: .22; }
@@ -521,9 +513,7 @@ svg { display: block; }
   font-weight: 900;
   box-shadow: 0 2px 8px rgba(255,95,162,.6);
 }
-.crate.crate-drop { animation: crateDrop .7s cubic-bezier(.3, 1.5, .5, 1); }
 @keyframes crateBob { 50% { transform: translateY(-5%) rotate(-3deg); } }
-@keyframes crateDrop { 0% { transform: translateY(-160%) scale(.6); opacity: 0; } 55% { transform: translateY(6%) scale(1.1, .9); opacity: 1; } 100% { transform: none; } }
 
 /* Locked slot */
 .lock {
@@ -980,6 +970,13 @@ svg { display: block; }
   #buy-btn { width: auto; min-width: 220px; padding: 6px 16px 6px 8px; }
   .mini-medal { width: 40px; height: 40px; }
   #atlas .col-name { display: none; }
+}
+
+/* Keep the same sky and button styling on touch screens, without constant large-layer
+   movement or repainting blurred shadows while the player is rapidly mixing. */
+@media (pointer: coarse) {
+  .aurora { animation: none; will-change: auto; }
+  #buy-btn:not(.cant-afford):not(.full), .shop-up, #rebirth.ready { animation: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

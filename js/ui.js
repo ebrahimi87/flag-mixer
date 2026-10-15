@@ -7,6 +7,7 @@ import { fmt, fmtCompact } from './format.js';
 import { ICONS } from './icons.js';
 
 const $ = id => document.getElementById(id);
+const setText = (el, text) => { if (el.textContent !== text) el.textContent = text; };
 
 export const els = {
   app:          $('app'),
@@ -55,7 +56,7 @@ export function buildStatic() {
 
 // ── Medals: a flag inside a rim whose color shows the tier band ──────────────
 function medalMarkup() {
-  return `<div class="rim"></div><div class="face"><img alt="" draggable="false"><div class="sheen"></div><div class="gloss"></div></div><div class="tier-chip"></div>`;
+  return `<div class="rim"></div><div class="face"><img alt="" draggable="false"><div class="sheen"></div><div class="gloss"></div></div><div class="tier-chip"></div><div class="merge-flash"></div>`;
 }
 
 function styleMedal(medal, tier) {
@@ -128,13 +129,46 @@ export function renderSlots(state) {
   });
 }
 
-// Plays a one-shot CSS animation class on a slot's medal (or crate).
+const SLOT_ANIMATIONS = {
+  pop: { duration: 550, easing: 'cubic-bezier(.2, 1.6, .4, 1)', frames: [
+    { transform: 'scale(.4)' }, { transform: 'scale(1.22)', offset: .55 }, { transform: 'scale(1)' },
+  ] },
+  'drop-in': { duration: 500, easing: 'cubic-bezier(.2, 1.4, .4, 1)', frames: [
+    { transform: 'translateY(-45%) scale(.3)', opacity: 0 },
+    { transform: 'translateY(4%) scale(1.08)', opacity: 1, offset: .6 }, { transform: 'none', opacity: 1 },
+  ] },
+  land: { duration: 300, easing: 'ease-out', frames: [
+    { transform: 'none' }, { transform: 'scale(.9, 1.08)', offset: .4 },
+    { transform: 'scale(1.05, .95)', offset: .7 }, { transform: 'none' },
+  ] },
+  wiggle: { duration: 450, easing: 'ease-in-out', frames: [
+    { transform: 'none' }, { transform: 'rotate(-10deg) scale(1.06)', offset: .25 },
+    { transform: 'rotate(8deg) scale(1.06)', offset: .75 }, { transform: 'none' },
+  ] },
+  'crate-drop': { duration: 700, easing: 'cubic-bezier(.3, 1.5, .5, 1)', frames: [
+    { transform: 'translateY(-160%) scale(.6)', opacity: 0 },
+    { transform: 'translateY(6%) scale(1.1, .9)', opacity: 1, offset: .55 }, { transform: 'none', opacity: 1 },
+  ] },
+};
+
+// Native animations restart immediately without reading layout or stacking listeners.
 export function animateSlot(i, name) {
-  const target = name.startsWith('crate') ? els.slots[i].el.querySelector('.crate') : els.slots[i].medal;
-  target.classList.remove(name);
-  void target.offsetWidth;
-  target.classList.add(name);
-  target.addEventListener('animationend', () => target.classList.remove(name), { once: true });
+  const s = els.slots[i];
+  const target = name.startsWith('crate') ? s.el.querySelector('.crate') : s.medal;
+  const { frames, ...options } = SLOT_ANIMATIONS[name];
+  s.animation?.cancel();
+  s.flashAnimation?.cancel();
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (name === 'pop') {
+    s.flashAnimation = s.medal.querySelector('.merge-flash').animate(
+      [{ opacity: .95 }, { opacity: 0 }], { duration: reducedMotion ? 0 : 400, easing: 'ease-out' },
+    );
+  }
+  const animation = target.animate(frames, { ...options, duration: reducedMotion ? 0 : options.duration });
+  s.animation = animation;
+  animation.onfinish = () => {
+    if (s.animation === animation) s.animation = null;
+  };
 }
 
 // Picks the column count that gives the biggest slots for the space available.
@@ -173,11 +207,16 @@ export function startDragVisual(state, from) {
   });
 }
 
+let hoveredSlot = null;
 export function hoverDragVisual(target) {
-  els.slots.forEach((s, i) => s.el.classList.toggle('drag-over', i === target));
+  if (target === hoveredSlot) return;
+  if (hoveredSlot !== null) els.slots[hoveredSlot].el.classList.remove('drag-over');
+  if (target !== null) els.slots[target].el.classList.add('drag-over');
+  hoveredSlot = target;
 }
 
 export function endDragVisual() {
+  hoveredSlot = null;
   els.ghost.style.display = 'none';
   els.slots.forEach(s => s.el.classList.remove('dragging', 'match', 'can-drop', 'drag-over'));
 }
@@ -193,15 +232,17 @@ export function renderCash(value) {
   if (text !== shownCashText) { els.cash.textContent = text; shownCashText = text; }
 }
 
+// Coins arriving together share one bump instead of forcing layout for each coin.
+els.cash.addEventListener('animationend', event => {
+  if (event.animationName === 'cashBump') els.cashRow.classList.remove('bump');
+});
 export function bumpCash() {
-  els.cashRow.classList.remove('bump');
-  void els.cashRow.offsetWidth;
   els.cashRow.classList.add('bump');
 }
 
 export function renderIncome(state) {
-  els.income.textContent = '+' + fmt(rules.incomePerSec(state)) + '/sec';
-  els.multiplier.textContent = state.multiplier > 1 ? '×' + state.multiplier.toFixed(2) : '';
+  setText(els.income, '+' + fmt(rules.incomePerSec(state)) + '/sec');
+  setText(els.multiplier, state.multiplier > 1 ? '×' + state.multiplier.toFixed(2) : '');
 }
 
 export function renderSound(state) {
@@ -220,8 +261,8 @@ export function renderRebirth(state) {
     return;
   }
   const { rb, flagCount, hasFlags, hasCash, ready } = p;
-  els.rebirthTitle.textContent = `Rebirth ${state.rebirths + 1}`;
-  els.rebirthReward.textContent = `×${rb.mult} income + free Austria`;
+  setText(els.rebirthTitle, `Rebirth ${state.rebirths + 1}`);
+  setText(els.rebirthReward, `×${rb.mult} income + free Austria`);
   if (rebirthFlagTier !== rb.flagTier) {
     els.reqFlagImg.src = flagSquare(rb.flagTier);
     rebirthFlagTier = rb.flagTier;
@@ -236,7 +277,8 @@ export function renderRebirth(state) {
 
 function setBar(container, fraction, done, text) {
   const fill = container.querySelector('.fill');
-  fill.style.width = (fraction * 100).toFixed(1) + '%';
+  const width = Math.round(fraction * 1000) / 10 + '%';
+  if (fill.style.width !== width) fill.style.width = width;
   fill.classList.toggle('done', done);
   const label = container.querySelector('.bar-text');
   if (label.textContent !== text) label.textContent = text;
@@ -253,7 +295,7 @@ export function renderShop(state, onUpgradeTier) {
     els.buyName.textContent = 'Buy ' + FLAGS[state.buyTier].name;
     shopTier = state.buyTier;
   }
-  els.buyCost.textContent = full ? 'Board full' : fmt(cost);
+  setText(els.buyCost, full ? 'Board full' : fmt(cost));
   els.buyBtn.classList.toggle('cant-afford', state.cash < cost);
   els.buyBtn.classList.toggle('full', full);
 
@@ -321,7 +363,11 @@ export function buildAtlasStrip() {
 }
 
 let atlasNext = -1;
+let atlasCount = -1;
 export function renderAtlas(state) {
+  // Discoveries only grow during play; buys and repeat merges do not change the atlas.
+  if (state.discovered.size === atlasCount) return;
+  atlasCount = state.discovered.size;
   const items = els.strip.children;
   let next = -1;
   for (let i = 0; i < items.length; i++) {

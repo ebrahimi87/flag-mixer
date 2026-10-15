@@ -6,6 +6,11 @@ import { flagSquare } from './data.js';
 const canvas = document.getElementById('fx');
 const g = canvas.getContext('2d');
 const floaters = document.getElementById('floaters');
+const app = document.getElementById('app');
+// Leave room for coins even when rapid merges fill the decorative effect budget.
+const MAX_DECORATIVE_PARTICLES = 140;
+const MAX_PARTICLES = 200;
+const MAX_FLOATERS = 24;
 const DEFAULT_COLORS = ['#ffd34d', '#ffffff', '#5cc8ff', '#ff5fa2'];
 
 let particles = [];
@@ -27,7 +32,7 @@ function start() {
 }
 
 function frame(now) {
-  const dt = Math.min((now - lastFrame) / 1000, 0.05);
+  const dt = Math.max(0, (now - lastFrame) / 1000);
   lastFrame = now;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, canvas.width, canvas.height);
@@ -47,6 +52,9 @@ const pick = list => list[Math.floor(Math.random() * list.length)];
 // ── Particle kinds ───────────────────────────────────────────────────────────
 function updateBallistic(p, dt) {
   p.life -= dt;
+  if (p.life <= 0) return false;
+  // Effects expire in real time, even if a slow frame skips part of their motion.
+  dt = Math.min(dt, 0.05);
   p.vy += p.gravity * dt;
   p.vx *= 1 - p.drag * dt;
   p.vy *= 1 - p.drag * dt;
@@ -131,6 +139,7 @@ function updateCoin(p, dt) {
 
 // ── Public effects ───────────────────────────────────────────────────────────
 export function sparks(x, y, colors = DEFAULT_COLORS, count = 24, speed = 380) {
+  count = Math.min(count, MAX_DECORATIVE_PARTICLES - particles.length);
   for (let i = 0; i < count; i++) {
     const a = rand(0, Math.PI * 2);
     const v = rand(speed * 0.3, speed);
@@ -144,6 +153,7 @@ export function sparks(x, y, colors = DEFAULT_COLORS, count = 24, speed = 380) {
 }
 
 export function confetti(x, y, colors = DEFAULT_COLORS, count = 60, speed = 650) {
+  count = Math.min(count, MAX_DECORATIVE_PARTICLES - particles.length);
   for (let i = 0; i < count; i++) {
     const a = rand(-Math.PI * 0.95, -Math.PI * 0.05);
     const v = rand(speed * 0.35, speed);
@@ -157,6 +167,7 @@ export function confetti(x, y, colors = DEFAULT_COLORS, count = 60, speed = 650)
 }
 
 export function ring(x, y, color = '#ffffff', size = 90, width = 10, life = 0.5) {
+  if (particles.length >= MAX_DECORATIVE_PARTICLES) return;
   particles.push({ x, y, color, size, width, life, maxLife: life, update: updateRing, draw: drawRing });
   start();
 }
@@ -167,6 +178,11 @@ export function coinsTo(x, y, targetEl, count, onArrive) {
   const tx = r.left + Math.min(r.width, 40) / 2;
   const ty = r.top + r.height / 2;
   for (let i = 0; i < count; i++) {
+    if (particles.length >= MAX_PARTICLES) {
+      // Skipping a visual coin must still release its share of the cash counter.
+      onArrive?.();
+      continue;
+    }
     particles.push({
       x, y, vx: rand(-220, 220), vy: rand(-420, -200), age: -i * 0.025,
       scatter: rand(0.18, 0.3), flight: rand(0.45, 0.65), bend: rand(-120, 120),
@@ -184,14 +200,20 @@ export function floatText(x, y, text, className = '') {
   el.style.left = x + 'px';
   el.style.top  = y + 'px';
   el.addEventListener('animationend', () => el.remove());
+  if (floaters.children.length >= MAX_FLOATERS) floaters.firstElementChild.remove();
   floaters.appendChild(el);
 }
 
+app.addEventListener('animationend', event => {
+  if (event.target === app && event.animationName === 'shake') app.classList.remove('shake');
+});
 export function shake(strength = 1) {
-  const app = document.getElementById('app');
+  if (app.classList.contains('shake')) {
+    const current = Number(app.style.getPropertyValue('--shake'));
+    if (strength > current) app.style.setProperty('--shake', strength);
+    return;
+  }
   app.style.setProperty('--shake', strength);
-  app.classList.remove('shake');
-  void app.offsetWidth; // restart the CSS animation
   app.classList.add('shake');
 }
 
